@@ -29,7 +29,8 @@ async function main() {
     update: {},
     create: {
       name: "Default Workspace",
-      // No slug in schema
+      slug: "default-workspace",
+      createdById: user.id,
     },
   });
 

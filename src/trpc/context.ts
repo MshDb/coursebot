@@ -1,7 +1,7 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 // import { type FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
 import superjson from "superjson";
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 import { db } from "@/lib/db";
 // import { auth } from "@/auth"; // Will be added in Phase 5
 
@@ -63,9 +63,44 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
 
 /**
  * Workspace (authenticated + authorized) procedure
- * (Workspace check will be implemented in future specs per AGENTS.md)
+ * Requires { workspaceId: string } in input.
+ * Verifies membership and injects workspace into ctx.
  */
-export const workspaceProcedure = protectedProcedure.use(({ next }) => {
-  // Future: Check workspace membership here
-  return next();
-});
+export const workspaceProcedure = protectedProcedure
+  .input(z.object({ workspaceId: z.string() }).passthrough())
+  .use(async ({ ctx, input, next, type, path }) => {
+    const workspace = await ctx.db.workspace.findUnique({
+      where: { id: input.workspaceId },
+      include: {
+        members: {
+          where: { userId: ctx.session.user.id },
+        },
+        subscription: true,
+      },
+    });
+
+    if (!workspace) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Workspace not found" });
+    }
+
+    if (workspace.members.length === 0) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "You are not a member of this workspace" });
+    }
+
+    const isLapsed = !workspace.subscription || 
+                     (workspace.subscription.status !== "ACTIVE" && workspace.subscription.status !== "TRIAL");
+
+    if (type === "mutation" && isLapsed && path !== "workspace.activateTrial" && path !== "workspace.delete") {
+      throw new TRPCError({ 
+        code: "FORBIDDEN", 
+        message: "Your workspace subscription has lapsed. Please activate a trial or subscription to perform this action." 
+      });
+    }
+
+    return next({
+      ctx: {
+        ...ctx,
+        workspace,
+      },
+    });
+  });

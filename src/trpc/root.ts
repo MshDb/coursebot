@@ -1,5 +1,6 @@
 import { createTRPCRouter, publicProcedure } from "./context";
 import { authRouter } from "@/modules/auth/router";
+import { workspaceRouter } from "@/modules/workspace/router";
 
 /**
  * This is the primary router for your server.
@@ -12,7 +13,7 @@ export const appRouter = createTRPCRouter({
     return { status: "ok", timestamp: new Date() };
   }),
   auth: authRouter,
-  // workspace: workspaceRouter, // Future specs
+  workspace: workspaceRouter,
 });
 
 // export type definition of API

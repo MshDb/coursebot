@@ -1,16 +1,56 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
+import { db } from "@/lib/db";
+import { ROUTES } from "@/lib/constants";
+import { WorkspaceService } from "@/modules/workspace/service";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Bot, Users, Send } from "lucide-react";
+import { ActivateTrialButton } from "./_components/activate-trial-button";
 
-export default function DashboardPage() {
+export default async function WorkspaceDashboardPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const session = await auth();
+  
+  if (!session?.user?.id) {
+    redirect(ROUTES.LOGIN);
+  }
+
+  const { id } = await params;
+
+  let workspace;
+  try {
+    workspace = await WorkspaceService.getById(db, id, session.user.id);
+  } catch (err) {
+    redirect(ROUTES.DASHBOARD);
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
         <p className="text-sm text-muted-foreground mt-2">
-          Here is a summary of your workspace activity.
+          Here is a summary of activity for {workspace.name}.
         </p>
       </div>
 
+      {!workspace.subscription && (
+        <Card className="bg-primary/5 border-primary/20">
+          <CardHeader>
+            <CardTitle>Activate Your Workspace</CardTitle>
+            <CardDescription>
+              Start your free 30-day trial to start creating bots and courses.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+             <ActivateTrialButton workspaceId={workspace.id} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Migration from dashboard/page.tsx */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {/* Placeholder metric cards aligned to UI visual direction */}
         <Card>
@@ -47,7 +87,6 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Empty state component pattern representation */}
       <div className="mt-8">
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center bg-card">
           <Bot className="h-12 w-12 text-muted-foreground mb-4" />
@@ -55,7 +94,6 @@ export default function DashboardPage() {
           <p className="text-sm text-muted-foreground mt-1 mb-4 max-w-sm">
             Connect your first Telegram bot to start distributing courses and sending messages.
           </p>
-          {/* A Link wrapping a Button could go here once /dashboard/bots is built */}
         </div>
       </div>
     </div>

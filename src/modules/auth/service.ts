@@ -18,6 +18,7 @@ export const AuthService = {
     });
 
     if (existingUser) {
+      console.error("[AuthService.register] Email already in use:", email);
       // Per spec: return generic error to prevent email enumeration, but
       // standard practice for generic APIs is to throw the error and let UI handle phrasing
       throw new BadRequestError(AUTH_ERRORS.EMAIL_IN_USE);
@@ -27,20 +28,25 @@ export const AuthService = {
     const passwordHash = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
 
     // Create user
-    const user = await db.user.create({
-      data: {
-        email,
-        passwordHash,
-        firstName,
-        lastName,
-      },
-    });
+    try {
+      const user = await db.user.create({
+        data: {
+          email,
+          passwordHash,
+          firstName,
+          lastName,
+        },
+      });
 
-    // Strip password hash from response
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { passwordHash: _, ...safeUser } = user;
+      // Strip password hash from response
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { passwordHash: _, ...safeUser } = user;
 
-    return { user: safeUser };
+      return { user: safeUser };
+    } catch (error) {
+      console.error("[AuthService.register] Database error during user creation:", error);
+      throw error;
+    }
   },
 
   // Note: the login flow explicitly happens inside Auth.js `authorize` callback.
