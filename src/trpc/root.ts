@@ -1,0 +1,19 @@
+import { createTRPCRouter, publicProcedure } from "./context";
+import { authRouter } from "@/modules/auth/router";
+
+/**
+ * This is the primary router for your server.
+ *
+ * All routers added in /api/routers should be manually added here.
+ */
+export const appRouter = createTRPCRouter({
+  // Health check procedure (T028)
+  health: publicProcedure.query(() => {
+    return { status: "ok", timestamp: new Date() };
+  }),
+  auth: authRouter,
+  // workspace: workspaceRouter, // Future specs
+});
+
+// export type definition of API
+export type AppRouter = typeof appRouter;

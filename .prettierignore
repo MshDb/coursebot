@@ -1,0 +1,6 @@
+.next
+node_modules
+coverage
+coverage-e2e
+playwright-report
+test-results

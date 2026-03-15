@@ -1,0 +1,20 @@
+{
+  "Common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "success": "Operation successful",
+    "error": "An error occurred"
+  },
+  "Auth": {
+    "login": "Sign In",
+    "register": "Create Account",
+    "email": "Email Address",
+    "password": "Password",
+    "firstName": "First Name",
+    "lastName": "Last Name",
+    "logout": "Sign Out"
+  }
+}

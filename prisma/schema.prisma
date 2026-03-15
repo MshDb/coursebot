@@ -1,0 +1,350 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+}
+
+// -----------------------------------------------------------------------------
+// ENUMS
+// -----------------------------------------------------------------------------
+enum Role {
+  OWNER
+  MEMBER
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum SubscriptionTier {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum BotStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  DELIVERING
+  COMPLETED
+  FAILED
+}
+
+enum PostTarget {
+  ALL
+  COURSE_BUYERS
+  SPECIFIC_COURSES
+}
+
+enum NotificationType {
+  POST
+  COURSE_MESSAGE
+  SYSTEM
+}
+
+enum MessageRole {
+  USER
+  BOT
+  SYSTEM
+}
+
+enum Platform {
+  TELEGRAM
+  WEB
+}
+
+// -----------------------------------------------------------------------------
+// NextAuth/Auth.js Core Entities
+// -----------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  firstName     String?   @map("first_name")
+  lastName      String?   @map("last_name")
+  email         String    @unique
+  emailVerified DateTime? @map("email_verified")
+  passwordHash  String?   @map("password_hash")
+  image         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  accounts      Account[]
+  sessions      Session[]
+  workspaces    WorkspaceMembership[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// -----------------------------------------------------------------------------
+// Domain Entities
+// -----------------------------------------------------------------------------
+
+model Workspace {
+  id        String    @id @default(cuid())
+  name      String
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  members      WorkspaceMembership[]
+  subscription Subscription?
+  invitations  Invitation[]
+  bots         Bot[]
+  courses      Course[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMembership {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  workspaceId String   @map("workspace_id")
+  role        Role     @default(MEMBER)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@map("workspace_memberships")
+}
+
+model Subscription {
+  id          String             @id @default(cuid())
+  workspaceId String             @unique @map("workspace_id")
+  tier        SubscriptionTier   @default(FREE)
+  status      SubscriptionStatus @default(TRIAL)
+  trialEndsAt DateTime?          @map("trial_ends_at")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model Invitation {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  email       String
+  role        Role     @default(MEMBER)
+  token       String   @unique
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, email])
+  @@map("invitations")
+}
+
+model Bot {
+  id             String    @id @default(cuid())
+  workspaceId    String    @map("workspace_id")
+  botName        String    @map("bot_name")
+  botUsername    String    @map("bot_username")
+  telegramBotId  String    @unique @map("telegram_bot_id")
+  encryptedToken String    @map("encrypted_token")
+  status         BotStatus @default(DRAFT)
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  links       BotCourse[]
+  subscribers BotSubscriber[]
+  posts       Post[]
+
+  @@map("bots")
+}
+
+model Course {
+  id          String       @id @default(cuid())
+  workspaceId String       @map("workspace_id")
+  name        String
+  description String?      @db.Text
+  price       Decimal      @db.Decimal(10, 2)
+  status      CourseStatus @default(DRAFT)
+  deletedAt   DateTime?    @map("deleted_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  workspace     Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  externalLinks CourseExternalLink[]
+  botLinks      BotCourse[]
+
+  @@map("courses")
+}
+
+model CourseExternalLink {
+  id        String   @id @default(cuid())
+  courseId  String   @map("course_id")
+  title     String
+  url       String
+  order     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@map("course_external_links")
+}
+
+model BotCourse {
+  id        String   @id @default(cuid())
+  botId     String   @map("bot_id")
+  courseId  String   @map("course_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  bot    Bot    @relation(fields: [botId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([botId, courseId])
+  @@map("bot_courses")
+}
+
+model EndUser {
+  id             String   @id @default(cuid())
+  telegramUserId String   @unique @map("telegram_user_id")
+  firstName      String?  @map("first_name")
+  lastName       String?  @map("last_name")
+  username       String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  subscriptions BotSubscriber[]
+  purchases     CoursePurchase[]
+
+  @@map("end_users")
+}
+
+model BotSubscriber {
+  id        String   @id @default(cuid())
+  botId     String   @map("bot_id")
+  endUserId String   @map("end_user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  bot     Bot     @relation(fields: [botId], references: [id], onDelete: Cascade)
+  endUser EndUser @relation(fields: [endUserId], references: [id], onDelete: Cascade)
+
+  @@unique([botId, endUserId])
+  @@map("bot_subscribers")
+}
+
+model CoursePurchase {
+  id               String   @id @default(cuid())
+  endUserId        String   @map("end_user_id")
+  courseId         String   @map("course_id")
+  amountPaid       Decimal  @map("amount_paid") @db.Decimal(10, 2)
+  currency         String   @default("UAH")
+  liqpayOrderId    String   @unique @map("liqpay_order_id")
+  liqpayPaymentId  String?  @map("liqpay_payment_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  endUser EndUser @relation(fields: [endUserId], references: [id], onDelete: Cascade)
+  // No strict relation to course directly to avoid deep coupling, but normally related
+  // For spec compliance we can leave this as a loose ID reference or add direct relation:
+  // course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@map("course_purchases")
+}
+
+model Post {
+  id          String     @id @default(cuid())
+  botId       String     @map("bot_id")
+  content     String     @db.Text
+  target      PostTarget @default(ALL)
+  targetIds   String[]   @map("target_ids") // Array of specific IDs based on target
+  status      PostStatus @default(DRAFT)
+  scheduledAt DateTime?  @map("scheduled_at")
+  completedAt DateTime?  @map("completed_at")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  bot        Bot            @relation(fields: [botId], references: [id], onDelete: Cascade)
+  deliveries PostDelivery[]
+
+  @@map("posts")
+}
+
+model PostDelivery {
+  id             String    @id @default(cuid())
+  postId         String    @map("post_id")
+  endUserId      String    @map("end_user_id")
+  telegramMsgId  String?   @map("telegram_msg_id")
+  status         String    @default("PENDING") // PENDING, SENT, FAILED
+  error          String?   @db.Text
+  deliveredAt    DateTime? @map("delivered_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  // normally relating to EndUser as well
+
+  @@unique([postId, endUserId])
+  @@map("post_deliveries")
+}
