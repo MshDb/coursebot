@@ -28,6 +28,8 @@ import { AddBotDialog } from "./add-bot-dialog";
 
 interface BotListProps {
   workspaceId: string;
+  showAddDialog: boolean;
+  setShowAddDialog: (show: boolean) => void;
 }
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -37,9 +39,8 @@ const statusVariant: Record<string, "default" | "secondary" | "destructive" | "o
   DELETED: "outline",
 };
 
-export function BotList({ workspaceId }: BotListProps) {
+export function BotList({ workspaceId, showAddDialog, setShowAddDialog }: BotListProps) {
   const router = useRouter();
-  const [showAddDialog, setShowAddDialog] = useState(false);
   const [deletingBotId, setDeletingBotId] = useState<string | null>(null);
 
   const { data: bots, isLoading, refetch } = api.bot.list.useQuery({ workspaceId });

@@ -169,3 +169,10 @@ export async function setMyCommands(
 ): Promise<void> {
   await callTelegramApi(token, "setMyCommands", { commands });
 }
+
+/**
+ * Gets the list of the bot's current commands.
+ */
+export async function getMyCommands(token: string): Promise<BotCommand[]> {
+  return callTelegramApi<BotCommand[]>(token, "getMyCommands");
+}

@@ -67,11 +67,16 @@ export default function BotDetailClient({ workspaceId, bot }: BotDetailClientPro
       {bot.status === "ERROR" && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Bot Token Error</AlertTitle>
+          <AlertTitle>
+            {bot.webhookUrl?.startsWith("http://localhost") 
+              ? "Webhook registration failed (Local Dev)" 
+              : "Bot Token Error"}
+          </AlertTitle>
           <AlertDescription className="flex items-center justify-between">
             <span>
-              The bot token appears to be revoked or invalid. The bot cannot receive or send messages.
-              Please verify the token with @BotFather.
+              {bot.webhookUrl?.startsWith("http://localhost") 
+                ? "Telegram requires an HTTPS URL for webhooks. On localhost, the bot is connected but won't receive messages until you use a tunnel like ngrok or deploy to HTTPS."
+                : "The bot token appears to be revoked or invalid. The bot cannot receive or send messages. Please verify the token with @BotFather."}
             </span>
             <Button
               variant="outline"

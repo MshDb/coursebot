@@ -26,17 +26,21 @@ export function BotConfigForm({
   const [menuCommands, setMenuCommands] = useState<Array<{ command: string; description: string }>>(
     initialMenuConfig ?? [],
   );
+  const [savingAction, setSavingAction] = useState<"welcome" | "menu" | null>(null);
 
   const updateMutation = api.bot.update.useMutation({
     onSuccess: () => {
       toast.success("Bot configuration saved");
+      setSavingAction(null);
     },
     onError: (err) => {
       toast.error(err.message || "Failed to save configuration");
+      setSavingAction(null);
     },
   });
 
   const handleSaveWelcome = () => {
+    setSavingAction("welcome");
     updateMutation.mutate({
       workspaceId,
       botId,
@@ -48,6 +52,7 @@ export function BotConfigForm({
     const validCommands = menuCommands.filter(
       (cmd) => cmd.command.trim() && cmd.description.trim(),
     );
+    setSavingAction("menu");
     updateMutation.mutate({
       workspaceId,
       botId,
@@ -95,8 +100,8 @@ export function BotConfigForm({
               {welcomeMessage.length} / 4096
             </p>
           </div>
-          <Button onClick={handleSaveWelcome} disabled={updateMutation.isPending}>
-            {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Button onClick={handleSaveWelcome} disabled={savingAction !== null}>
+            {savingAction === "welcome" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Welcome Message
           </Button>
         </CardContent>
@@ -127,7 +132,7 @@ export function BotConfigForm({
                   placeholder="Description of the command"
                   value={cmd.description}
                   onChange={(e) => updateCommand(index, "description", e.target.value)}
-                  disabled={updateMutation.isPending}
+                  disabled={savingAction !== null}
                 />
               </div>
               <Button
@@ -135,20 +140,20 @@ export function BotConfigForm({
                 variant="ghost"
                 size="icon"
                 onClick={() => removeCommand(index)}
-                disabled={updateMutation.isPending}
+                disabled={savingAction !== null}
                 className="shrink-0"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>
           ))}
-          <Button type="button" variant="outline" onClick={addCommand} disabled={updateMutation.isPending}>
+          <Button type="button" variant="outline" onClick={addCommand} disabled={savingAction !== null}>
             <Plus className="mr-2 h-4 w-4" />
             Add Command
           </Button>
           <div>
-            <Button onClick={handleSaveMenu} disabled={updateMutation.isPending}>
-              {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button onClick={handleSaveMenu} disabled={savingAction !== null}>
+              {savingAction === "menu" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Menu Commands
             </Button>
           </div>

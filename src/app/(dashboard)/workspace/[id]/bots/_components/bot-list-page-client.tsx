@@ -26,7 +26,11 @@ export default function BotListPageClient({ workspaceId }: BotListPageClientProp
           Connect Bot
         </Button>
       </div>
-      <BotList workspaceId={workspaceId} />
+      <BotList 
+        workspaceId={workspaceId} 
+        showAddDialog={showAddDialog}
+        setShowAddDialog={setShowAddDialog}
+      />
     </div>
   );
 }

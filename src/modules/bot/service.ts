@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { BotStatus } from "@prisma/client";
+import { Prisma, BotStatus } from "@prisma/client";
 import { randomBytes } from "crypto";
 import { encrypt, decrypt } from "@/lib/encryption";
 import {
@@ -7,6 +7,7 @@ import {
   setWebhook,
   deleteWebhook,
   setMyCommands,
+  getMyCommands,
 } from "@/lib/telegram";
 import type { AddBotInput, UpdateBotInput } from "./schema";
 import type { BotWithSubscriberCount } from "./types";
@@ -93,37 +94,93 @@ export const BotService = {
     // 4. Generate webhook secret token
     const webhookSecretToken = randomBytes(WEBHOOK_SECRET_LENGTH / 2).toString("hex");
 
-    // 5. Build webhook URL
-    const webhookUrl = `${env.WEBHOOK_BASE_URL}${WEBHOOK_PATH_PATTERN}/${""}`; // placeholder, updated after creation
+    // 5. Build placeholder webhook URL
+    const webhookUrl = `${env.WEBHOOK_BASE_URL}${WEBHOOK_PATH_PATTERN}/${""}`;
 
-    // 6. Create the bot record
-    const bot = await db.bot.create({
-      data: {
-        workspaceId,
-        telegramBotId: BigInt(botInfo.id),
-        telegramBotUsername: botInfo.username,
-        displayName: botInfo.first_name,
-        tokenEncrypted,
-        webhookSecretToken,
-        status: BotStatus.ACTIVE,
-        welcomeMessage: DEFAULT_WELCOME_MESSAGE,
+    // 6. Fetch existing commands from Telegram
+    let menuConfig: { command: string; description: string }[] | null = null;
+    try {
+      const existingCommands = await getMyCommands(input.token);
+      if (existingCommands && existingCommands.length > 0) {
+        menuConfig = existingCommands;
+      }
+    } catch {
+      // Ignore errors fetching commands; fall back to null
+    }
+
+    // 7. Create or Restore the bot record
+    let bot;
+    if (existing) {
+      // Restore soft-deleted bot
+      bot = await db.bot.update({
+        where: { id: existing.id },
+        data: {
+          workspaceId,
+          telegramBotUsername: botInfo.username,
+          displayName: botInfo.first_name,
+          tokenEncrypted,
+          webhookSecretToken,
+          status: BotStatus.ACTIVE,
+          deletedAt: null, // restore
+          menuConfig: menuConfig ?? existing.menuConfig ?? Prisma.DbNull, // Update with incoming or keep existing
+          // Keep prior welcome message if we have one
+        },
+      });
+    } else {
+      // Completely new bot
+      bot = await db.bot.create({
+        data: {
+          workspaceId,
+          telegramBotId: BigInt(botInfo.id),
+          telegramBotUsername: botInfo.username,
+          displayName: botInfo.first_name,
+          tokenEncrypted,
+          webhookSecretToken,
+          status: BotStatus.ACTIVE,
+          welcomeMessage: DEFAULT_WELCOME_MESSAGE,
+          menuConfig: menuConfig ?? Prisma.DbNull,
+        },
+      });
+    }
+
+    // 8. Register webhook with Telegram (now we have the bot ID)
+    const finalWebhookUrl = `${env.WEBHOOK_BASE_URL}${WEBHOOK_PATH_PATTERN}/${bot.id}`;
+    let registrationError = false;
+
+    try {
+      await setWebhook(input.token, finalWebhookUrl, webhookSecretToken);
+    } catch (error) {
+      console.error("Failed to set webhook:", error);
+      registrationError = true;
+    }
+
+    // 9. Update bot with the webhook URL (and status if error)
+    const updatedBot = await db.bot.update({
+      where: { id: bot.id },
+      data: { 
+        webhookUrl: finalWebhookUrl,
+        status: registrationError ? BotStatus.ERROR : BotStatus.ACTIVE
       },
     });
 
-    // 7. Register webhook with Telegram (now we have the bot ID)
-    const finalWebhookUrl = `${env.WEBHOOK_BASE_URL}${WEBHOOK_PATH_PATTERN}/${bot.id}`;
-    await setWebhook(input.token, finalWebhookUrl, webhookSecretToken);
-
-    // 8. Update bot with the webhook URL
-    const updatedBot = await db.bot.update({
-      where: { id: bot.id },
-      data: { webhookUrl: finalWebhookUrl },
-    });
-
-    // 9. Set default commands
-    await setMyCommands(input.token, [
-      { command: "start", description: "Start the bot" },
-    ]);
+    // 10. Set commands in Telegram (ensure start command exists)
+    try {
+      let commandsToSet = menuConfig || [];
+      if (!commandsToSet.some(c => c.command === "start")) {
+        commandsToSet = [{ command: "start", description: "Start the bot" }, ...commandsToSet];
+        await setMyCommands(input.token, commandsToSet);
+        // Sync back to db
+        await db.bot.update({
+          where: { id: bot.id },
+          data: { menuConfig: commandsToSet }
+        });
+      }
+    } catch (error) {
+      console.error("Failed to set commands:", error);
+      // If setting commands failed but webhook succeeded (unlikely but possible), 
+      // we might still want to mark as ERROR or just log it.
+      // For now, let's keep the status from the webhook step.
+    }
 
     return updatedBot;
   },
@@ -146,7 +203,7 @@ export const BotService = {
     }
 
     if (input.menuConfig !== undefined) {
-      updateData.menuConfig = input.menuConfig;
+      updateData.menuConfig = input.menuConfig ?? Prisma.DbNull;
 
       // If menu config is provided, update Telegram commands
       if (input.menuConfig) {

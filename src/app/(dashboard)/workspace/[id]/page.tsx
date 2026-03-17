@@ -27,6 +27,28 @@ export default async function WorkspaceDashboardPage({
     redirect(ROUTES.DASHBOARD);
   }
 
+  // Fetch real metrics
+  const bots = await db.bot.findMany({
+    where: { 
+      workspaceId: workspace.id,
+      deletedAt: null
+    },
+    include: {
+      _count: {
+        select: { subscribers: true }
+      }
+    }
+  });
+
+  const botCount = bots.length;
+  const subscriberCount = bots.reduce((acc, bot) => acc + bot._count.subscribers, 0);
+  const messagesSentCount = await db.post.count({
+    where: {
+      bot: { workspaceId: workspace.id },
+      // for now simplistic count of all posts
+    }
+  });
+
   return (
     <div className="space-y-6">
       <div>
@@ -59,8 +81,10 @@ export default async function WorkspaceDashboardPage({
             <Bot className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
-            <p className="text-xs text-muted-foreground mt-1">Connect a bot to start</p>
+            <div className="text-2xl font-bold">{botCount}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {botCount === 0 ? "Connect a bot to start" : `${botCount} active bot${botCount === 1 ? "" : "s"}`}
+            </p>
           </CardContent>
         </Card>
 
@@ -70,7 +94,7 @@ export default async function WorkspaceDashboardPage({
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
+            <div className="text-2xl font-bold">{subscriberCount}</div>
             <p className="text-xs text-muted-foreground mt-1">Across all bots</p>
           </CardContent>
         </Card>
@@ -81,21 +105,23 @@ export default async function WorkspaceDashboardPage({
             <Send className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
+            <div className="text-2xl font-bold">{messagesSentCount}</div>
             <p className="text-xs text-muted-foreground mt-1">This month</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="mt-8">
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center bg-card">
-          <Bot className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-semibold">No bots connected</h3>
-          <p className="text-sm text-muted-foreground mt-1 mb-4 max-w-sm">
-            Connect your first Telegram bot to start distributing courses and sending messages.
-          </p>
+      {botCount === 0 && (
+        <div className="mt-8">
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center bg-card">
+            <Bot className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold">No bots connected</h3>
+            <p className="text-sm text-muted-foreground mt-1 mb-4 max-w-sm">
+              Connect your first Telegram bot to start distributing courses and sending messages.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
