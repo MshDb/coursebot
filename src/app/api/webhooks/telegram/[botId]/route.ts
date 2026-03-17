@@ -8,6 +8,8 @@ import {
   DEFAULT_WELCOME_MESSAGE,
   DEFAULT_FALLBACK_MESSAGE,
 } from "@/modules/bot/constants";
+import { PaymentService } from "@/modules/payment/service";
+import { inngest } from "@/lib/inngest";
 
 // ---------------------------------------------------------------------------
 // Types for Telegram Update objects
@@ -79,7 +81,7 @@ export async function POST(
     if (update.message) {
       await handleMessage(bot, token, update.message);
     } else if (update.callback_query) {
-      await handleCallbackQuery(token, update.callback_query);
+      await handleCallbackQuery(token, update.callback_query, bot.id);
     }
 
     // Always return 200 to Telegram (even on errors, to prevent retries)
@@ -106,6 +108,8 @@ async function handleMessage(
 
   if (isCommand && text.startsWith("/start")) {
     await handleStartCommand(bot, token, message);
+  } else if (isCommand && text.startsWith("/courses")) {
+    await handleCoursesCommand(bot, token, message);
   } else {
     // T019: Unknown message fallback
     await sendMessage(token, message.chat.id, DEFAULT_FALLBACK_MESSAGE);
@@ -156,13 +160,132 @@ async function handleStartCommand(
 // T032: Callback query handler
 // ---------------------------------------------------------------------------
 
+async function handleCoursesCommand(
+  bot: { id: string },
+  token: string,
+  message: TelegramMessage,
+) {
+  const telegramUser = message.from;
+  const botLinks = await db.botCourse.findMany({
+    where: { botId: bot.id, course: { status: "PUBLISHED", deletedAt: null } },
+    include: { course: true },
+  });
+
+  if (botLinks.length === 0) {
+    await sendMessage(token, message.chat.id, "No active courses available right now.");
+    return;
+  }
+
+  const courses = botLinks.map((bl: any) => bl.course);
+  
+  const inline_keyboard = courses.map((c: any) => [
+    { text: `${c.name} - ${Number(c.price) === 0 ? "Free" : c.price + " UAH"}`, callback_data: `course_select:${c.id}` }
+  ]);
+
+  await sendMessage(token, message.chat.id, "📚 <b>Available Courses</b>\nSelect a course below to learn more:", {
+    parse_mode: "HTML",
+    reply_markup: { inline_keyboard }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// T032: Callback query handler
+// ---------------------------------------------------------------------------
+
 async function handleCallbackQuery(
   token: string,
   callbackQuery: TelegramCallbackQuery,
+  botId: string
 ) {
   // Answer the callback query to remove the loading indicator
   await answerCallbackQuery(token, callbackQuery.id);
 
-  // If callback data is present, we can handle specific actions here.
-  // For now, just acknowledge — future specs will add course browsing etc.
+  if (!callbackQuery.data) return;
+  const data = callbackQuery.data;
+
+  const telegramUser = callbackQuery.from;
+  const endUser = await EndUserService.findOrCreate(db, BigInt(telegramUser.id), {
+    firstName: telegramUser.first_name ?? null,
+    lastName: telegramUser.last_name ?? null,
+    username: telegramUser.username ?? null,
+    languageCode: telegramUser.language_code ?? null,
+  });
+
+  if (data.startsWith("course_select:")) {
+    const courseId = data.split(":")[1];
+    if (!courseId) return;
+    
+    const hasAccess = await PaymentService.checkAccess(db, endUser.id, { courseId });
+    if (hasAccess) {
+      await sendMessage(token, telegramUser.id, "You already have access to this course!");
+      return;
+    }
+
+    const course = await db.course.findUnique({ where: { id: courseId } });
+    if (!course || course.deletedAt) return;
+
+    const text = `📘 <b>${course.name}</b>\n\n${course.description || "No description."}\n\nPrice: ${Number(course.price) === 0 ? "Free" : course.price + " UAH"}`;
+    
+    await sendMessage(token, telegramUser.id, text, {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [[
+          { text: "Buy", callback_data: `course_buy:${course.id}` }
+        ]]
+      }
+    });
+
+  } else if (data.startsWith("course_buy:")) {
+    const courseId = data.split(":")[1];
+    if (!courseId) return;
+
+    const hasAccess = await PaymentService.checkAccess(db, endUser.id, { courseId });
+    if (hasAccess) {
+      await sendMessage(token, telegramUser.id, "You already have access to this course!");
+      return;
+    }
+
+    const course = await db.course.findUnique({ where: { id: courseId } });
+    if (!course || course.deletedAt) return;
+
+    if (Number(course.price) === 0) {
+      // Free course - grant access
+      const purchase = await db.coursePurchase.create({
+        data: {
+          endUserId: endUser.id,
+          courseId: course.id,
+          amountPaid: 0,
+          liqpayOrderId: "free_" + course.id + "_" + endUser.id + "_" + Date.now().toString(),
+          liqpayPaymentId: "free_grant_" + Date.now().toString(),
+        }
+      });
+      
+      // Trigger event immediately
+      await inngest.send({
+        name: "payment.success",
+        data: {
+          botId,
+          endUserId: endUser.id,
+          courseId: course.id,
+          purchaseId: purchase.id,
+        },
+      });
+    } else {
+      // Paid purchase url
+      const { paymentUrl } = await PaymentService.createPurchase(db, {
+        endUserId: endUser.id,
+        courseId: course.id,
+        amount: Number(course.price),
+      });
+
+      await sendMessage(token, telegramUser.id, `To purchase <b>${course.name}</b>, please complete your payment using the link below:`, {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [[
+            { text: "Pay Now", url: paymentUrl }
+          ]]
+        }
+      });
+    }
+  }
 }

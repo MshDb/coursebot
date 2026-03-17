@@ -13,6 +13,10 @@ export const env = createEnv({
     NEXTAUTH_URL: z.string().url().optional(), // Optional since Auth.js can infer it in many cases
     ENCRYPTION_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/, "ENCRYPTION_KEY must be 64 hex characters (32 bytes for AES-256)"),
     WEBHOOK_BASE_URL: z.string().url().refine((url) => !url.endsWith("/"), "WEBHOOK_BASE_URL must not end with a trailing slash"),
+    LIQPAY_PUBLIC_KEY: z.string().min(1),
+    LIQPAY_PRIVATE_KEY: z.string().min(1),
+    INNGEST_EVENT_KEY: z.string().min(1).optional(),
+    INNGEST_SIGNING_KEY: z.string().min(1).optional(),
   },
 
   /**
@@ -34,6 +38,10 @@ export const env = createEnv({
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
     ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
     WEBHOOK_BASE_URL: process.env.WEBHOOK_BASE_URL,
+    LIQPAY_PUBLIC_KEY: process.env.LIQPAY_PUBLIC_KEY,
+    LIQPAY_PRIVATE_KEY: process.env.LIQPAY_PRIVATE_KEY,
+    INNGEST_EVENT_KEY: process.env.INNGEST_EVENT_KEY,
+    INNGEST_SIGNING_KEY: process.env.INNGEST_SIGNING_KEY,
   },
 
   /**
