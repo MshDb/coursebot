@@ -1,6 +1,7 @@
 import { createTRPCRouter, publicProcedure } from "./context";
 import { authRouter } from "@/modules/auth/router";
 import { workspaceRouter } from "@/modules/workspace/router";
+import { botRouter } from "@/modules/bot/router";
 
 /**
  * This is the primary router for your server.
@@ -14,6 +15,7 @@ export const appRouter = createTRPCRouter({
   }),
   auth: authRouter,
   workspace: workspaceRouter,
+  bot: botRouter,
 });
 
 // export type definition of API

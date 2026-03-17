@@ -31,9 +31,16 @@ enum SubscriptionTier {
 }
 
 enum BotStatus {
-  DRAFT
   ACTIVE
-  SUSPENDED
+  PAUSED
+  ERROR
+  DELETED
+}
+
+enum SubscriberStatus {
+  ACTIVE
+  BLOCKED
+  UNSUBSCRIBED
 }
 
 enum CourseStatus {
@@ -204,16 +211,20 @@ model Invitation {
 }
 
 model Bot {
-  id             String    @id @default(cuid())
-  workspaceId    String    @map("workspace_id")
-  botName        String    @map("bot_name")
-  botUsername    String    @map("bot_username")
-  telegramBotId  String    @unique @map("telegram_bot_id")
-  encryptedToken String    @map("encrypted_token")
-  status         BotStatus @default(DRAFT)
-  deletedAt      DateTime? @map("deleted_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id                   String    @id @default(cuid())
+  workspaceId          String    @map("workspace_id")
+  telegramBotId        BigInt    @unique @map("telegram_bot_id")
+  telegramBotUsername   String    @map("telegram_bot_username")
+  displayName          String    @map("display_name")
+  tokenEncrypted       String    @map("token_encrypted")
+  welcomeMessage       String?   @map("welcome_message") @db.Text
+  menuConfig           Json?     @map("menu_config")
+  status               BotStatus @default(ACTIVE)
+  webhookUrl           String?   @map("webhook_url")
+  webhookSecretToken   String    @map("webhook_secret_token")
+  deletedAt            DateTime? @map("deleted_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
   workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   links       BotCourse[]
@@ -271,10 +282,11 @@ model BotCourse {
 
 model EndUser {
   id             String   @id @default(cuid())
-  telegramUserId String   @unique @map("telegram_user_id")
+  telegramUserId BigInt   @unique @map("telegram_user_id")
   firstName      String?  @map("first_name")
   lastName       String?  @map("last_name")
   username       String?
+  languageCode   String?  @map("language_code")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
@@ -285,11 +297,14 @@ model EndUser {
 }
 
 model BotSubscriber {
-  id        String   @id @default(cuid())
-  botId     String   @map("bot_id")
-  endUserId String   @map("end_user_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id             String           @id @default(cuid())
+  botId          String           @map("bot_id")
+  endUserId      String           @map("end_user_id")
+  status         SubscriberStatus @default(ACTIVE)
+  subscribedAt   DateTime         @default(now()) @map("subscribed_at")
+  unsubscribedAt DateTime?        @map("unsubscribed_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
 
   bot     Bot     @relation(fields: [botId], references: [id], onDelete: Cascade)
   endUser EndUser @relation(fields: [endUserId], references: [id], onDelete: Cascade)
